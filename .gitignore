@@ -7,3 +7,4 @@ venv/
 config.yaml
 !config.yaml
 runtime.json
+history.json

@@ -18,6 +18,8 @@ def snapshot(
     return EnergySnapshot(
         grid_import_w=grid_import_w,
         grid_export_w=available_surplus_w,
+        house_power_w=800,
+        house_power_source="derived",
         solar_input_w=1200,
         solar_output_w=800,
         battery_soc_percent=battery_soc_percent,

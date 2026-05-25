@@ -16,6 +16,8 @@ class NumericStateClient(Protocol):
 class EnergySnapshot:
     grid_import_w: float
     grid_export_w: float
+    house_power_w: float
+    house_power_source: str
     solar_input_w: float
     solar_output_w: float
     battery_soc_percent: float | None
@@ -31,6 +33,7 @@ class EnergySnapshot:
         return [
             f"grid import: {self.grid_import_w:.0f} W",
             f"grid export: {self.grid_export_w:.0f} W",
+            f"house consumption: {self.house_power_w:.0f} W ({self.house_power_source})",
             f"solar input: {self.solar_input_w:.0f} W",
             f"solar output: {self.solar_output_w:.0f} W",
             f"battery SOC: {soc}",
@@ -76,6 +79,9 @@ def build_energy_snapshot(config: EnergyBotConfig, client: NumericStateClient) -
     warnings: list[str] = []
     grid_import_w = _read_numeric(client, config.sources.grid_import_power_entity, warnings)
     grid_export_w = _read_numeric(client, config.sources.grid_export_power_entity, warnings)
+    explicit_house_power_w: float | None = None
+    if config.sources.house_power_entity:
+        explicit_house_power_w = _read_optional_numeric(client, config.sources.house_power_entity, warnings)
 
     solar_input_w = 0.0
     solar_output_w = 0.0
@@ -100,10 +106,18 @@ def build_energy_snapshot(config: EnergyBotConfig, client: NumericStateClient) -
     available_surplus_w = max(0.0, net_export_w - config.app.reserve_w)
     solar_input_above_limit_w = max(0.0, solar_input_w - config.sources.solarbox_output_limit_w)
     solar_surplus_risk_w = solar_input_above_limit_w if battery_near_target else 0.0
+    if explicit_house_power_w is not None:
+        house_power_w = explicit_house_power_w
+        house_power_source = "sensor"
+    else:
+        house_power_w = max(0.0, solar_output_w + grid_import_w - grid_export_w)
+        house_power_source = "derived"
 
     return EnergySnapshot(
         grid_import_w=grid_import_w,
         grid_export_w=grid_export_w,
+        house_power_w=house_power_w,
+        house_power_source=house_power_source,
         solar_input_w=solar_input_w,
         solar_output_w=solar_output_w,
         battery_soc_percent=battery_soc_percent,

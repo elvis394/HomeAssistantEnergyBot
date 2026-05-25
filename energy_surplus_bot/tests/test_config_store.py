@@ -20,6 +20,7 @@ def valid_config() -> dict:
         "sources": {
             "grid_import_power_entity": "sensor.grid_import_power",
             "grid_export_power_entity": "sensor.grid_export_power",
+            "house_power_entity": "sensor.house_power",
             "solarbox_output_limit_w": 800,
             "anker_systems": [
                 {

@@ -15,6 +15,8 @@ class DiagnosticsTests(unittest.TestCase):
 
         self.assertEqual(snapshot.grid_export_w, 420)
         self.assertEqual(snapshot.grid_import_w, 0)
+        self.assertEqual(snapshot.house_power_w, 680)
+        self.assertEqual(snapshot.house_power_source, "sensor")
         self.assertEqual(snapshot.available_surplus_w, 270)
         self.assertGreater(snapshot.solar_input_w, snapshot.solar_output_w)
         self.assertTrue(snapshot.battery_near_target)
@@ -28,6 +30,7 @@ class DiagnosticsTests(unittest.TestCase):
             {
                 config.sources.grid_import_power_entity: EntityState(config.sources.grid_import_power_entity, "0", {}),
                 config.sources.grid_export_power_entity: EntityState(config.sources.grid_export_power_entity, "0", {}),
+                config.sources.house_power_entity: EntityState(config.sources.house_power_entity, "750", {}),
                 config.sources.anker_systems[0].solar_input_power_entity: EntityState(
                     config.sources.anker_systems[0].solar_input_power_entity, "0", {}
                 ),
@@ -58,6 +61,17 @@ class DiagnosticsTests(unittest.TestCase):
         snapshot = build_energy_snapshot(config, client)
 
         self.assertEqual(snapshot.battery_soc_percent, 80)
+
+    def test_house_power_can_be_derived_without_sensor(self) -> None:
+        data = valid_config()
+        data["sources"]["house_power_entity"] = ""
+        config = validate_config_dict(data)
+        client = DemoHomeAssistantClient.from_config(config)
+
+        snapshot = build_energy_snapshot(config, client)
+
+        self.assertEqual(snapshot.house_power_source, "derived")
+        self.assertEqual(snapshot.house_power_w, 360)
 
     def test_non_numeric_sensor_creates_warning(self) -> None:
         config = validate_config_dict(valid_config())

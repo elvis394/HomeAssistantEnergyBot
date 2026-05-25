@@ -7,7 +7,9 @@ Home Assistant add-on that watches solar production, grid import/export, Anker S
 - Reads two Anker Solix systems.
 - Supports separate grid import and grid export sensors.
 - Aggregates PV input, solar output, battery SOC and battery power.
+- Shows total house consumption from a configured sensor or derived fallback.
 - Tracks daily runtime per device.
+- Stores a compact local history of recent measurements and decisions.
 - Decides whether configured switches should turn on, turn off or stay unchanged.
 - Includes a built-in web UI on port `8099`.
 - Runs a background scheduler while the web UI is active.

@@ -137,6 +137,10 @@ class DemoHomeAssistantClient:
                 config.sources.grid_export_power_entity, "420", {"unit_of_measurement": "W"}
             ),
         }
+        if config.sources.house_power_entity:
+            states[config.sources.house_power_entity] = EntityState(
+                config.sources.house_power_entity, "680", {"unit_of_measurement": "W"}
+            )
 
         for index, system in enumerate(config.sources.anker_systems, start=1):
             states[system.solar_input_power_entity] = EntityState(

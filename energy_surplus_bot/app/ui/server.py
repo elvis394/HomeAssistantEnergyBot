@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from app.config_store import load_config, validate_config_dict
+from app.history_store import append_history_entry, load_history_state
 from app.ha_client import DemoHomeAssistantClient, HomeAssistantClient, HomeAssistantError
 from app.models import ConfigError, EnergyBotConfig
 from app.runtime_tracker import RuntimeState, load_runtime_state, save_runtime_state
@@ -38,8 +39,11 @@ def build_status_payload(
     client: EnergyBotClient,
     runtime_state: RuntimeState,
     now: datetime | None = None,
+    history_path: str | Path | None = None,
 ) -> dict[str, Any]:
     result = run_once(config, client, runtime_state, now=now)
+    if history_path is not None:
+        append_history_entry(history_path, result)
     return {
         "ran_at": result.ran_at.isoformat(),
         "snapshot": asdict(result.snapshot),
@@ -47,6 +51,12 @@ def build_status_payload(
         "service_calls": [asdict(call) for call in result.service_calls],
         "device_states": result.device_states,
     }
+
+
+def build_history_payload(history_path: str | Path, limit: int = 50) -> dict[str, Any]:
+    state = load_history_state(history_path)
+    entries = state.entries[-limit:]
+    return {"entries": [entry.to_dict() for entry in reversed(entries)]}
 
 
 def list_entity_payload(client: EnergyBotClient) -> list[dict[str, Any]]:
@@ -89,9 +99,11 @@ class EnergyBotRequestHandler(BaseHTTPRequestHandler):
                 config = self.server.load_config()
                 client = self.server.client_factory(config)
                 runtime_state = load_runtime_state(self.server.runtime_path)
-                payload = build_status_payload(config, client, runtime_state)
+                payload = build_status_payload(config, client, runtime_state, history_path=self.server.history_path)
                 save_runtime_state(self.server.runtime_path, runtime_state)
                 self._send_json(payload)
+            elif self.path == "/api/history":
+                self._send_json(build_history_payload(self.server.history_path))
             else:
                 self._send_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
         except (ConfigError, HomeAssistantError, ValueError) as exc:
@@ -147,11 +159,13 @@ class EnergyBotHttpServer(ThreadingHTTPServer):
         server_address: tuple[str, int],
         config_path: str | Path,
         runtime_path: str | Path,
+        history_path: str | Path,
         client_factory: ClientFactory,
     ) -> None:
         super().__init__(server_address, EnergyBotRequestHandler)
         self.config_path = Path(config_path)
         self.runtime_path = Path(runtime_path)
+        self.history_path = Path(history_path)
         self.client_factory = client_factory
         self.latest_status: dict[str, Any] | None = None
         self.latest_error: str | None = None
@@ -180,7 +194,12 @@ class EnergyBotHttpServer(ThreadingHTTPServer):
                 interval = config.app.decision_interval_seconds
                 client = self.client_factory(config)
                 runtime_state = load_runtime_state(self.runtime_path)
-                self.latest_status = build_status_payload(config, client, runtime_state)
+                self.latest_status = build_status_payload(
+                    config,
+                    client,
+                    runtime_state,
+                    history_path=self.history_path,
+                )
                 self.latest_error = None
                 save_runtime_state(self.runtime_path, runtime_state)
             except Exception as exc:  # Keep the add-on alive and visible after transient HA errors.
@@ -193,6 +212,7 @@ def serve_ui(
     runtime_path: str | Path,
     host: str,
     port: int,
+    history_path: str | Path | None = None,
     use_live_ha: bool = False,
     run_scheduler: bool = True,
 ) -> None:
@@ -200,6 +220,7 @@ def serve_ui(
         (host, port),
         config_path=config_path,
         runtime_path=runtime_path,
+        history_path=history_path or Path(runtime_path).with_name("history.json"),
         client_factory=default_client_factory(use_live_ha),
     )
     if run_scheduler:
@@ -255,6 +276,10 @@ INDEX_HTML = """<!doctype html>
         </div>
       </div>
       <div id="warnings" class="warnings"></div>
+    </section>
+    <section class="history-section">
+      <h2>Verlauf</h2>
+      <div id="history" class="history-list"></div>
     </section>
     <section class="config-section">
       <h2><svg><use href="#icon-settings"></use></svg> Konfiguration</h2>
@@ -345,6 +370,10 @@ section {
 }
 
 .status-section {
+  grid-column: 1 / -1;
+}
+
+.history-section {
   grid-column: 1 / -1;
 }
 
@@ -450,9 +479,16 @@ svg {
   gap: 8px;
 }
 
+.history-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
 .decision,
 .service-call,
-.entity-row {
+.entity-row,
+.history-row {
   display: grid;
   grid-template-columns: 28px 1fr auto;
   gap: 10px;
@@ -464,13 +500,15 @@ svg {
 }
 
 .decision strong,
-.service-call strong {
+.service-call strong,
+.history-row strong {
   display: block;
 }
 
 .decision small,
 .service-call small,
-.entity-row small {
+.entity-row small,
+.history-row small {
   color: var(--muted);
 }
 
@@ -551,6 +589,7 @@ const metricGridEl = document.querySelector('#metricGrid');
 const decisionsEl = document.querySelector('#decisions');
 const serviceCallsEl = document.querySelector('#serviceCalls');
 const warningsEl = document.querySelector('#warnings');
+const historyEl = document.querySelector('#history');
 const configEl = document.querySelector('#config');
 const saveResultEl = document.querySelector('#saveResult');
 const entitiesEl = document.querySelector('#entities');
@@ -565,13 +604,15 @@ async function getJson(path) {
 }
 
 async function refresh() {
-  const [config, status, entityData] = await Promise.all([
+  const [config, status, entityData, history] = await Promise.all([
     getJson('api/config'),
     getJson('api/status'),
     getJson('api/entities'),
+    getJson('api/history'),
   ]);
   configEl.value = JSON.stringify(config, null, 2);
   renderStatus(status);
+  renderHistory(history);
   entities = entityData;
   renderEntities();
 }
@@ -595,6 +636,7 @@ function renderStatus(status) {
   lastRunEl.textContent = `Letzte Aktualisierung: ${ranAt.toLocaleString('de-DE')}`;
   metricGridEl.innerHTML = [
     metric('grid', 'Netzbezug', formatW(snapshot.grid_import_w), 'aktuell', snapshot.grid_import_w > 0 ? 'warn' : 'good'),
+    metric('grid', 'Hausverbrauch', formatW(snapshot.house_power_w), snapshot.house_power_source === 'sensor' ? 'Sensorwert' : 'abgeleitet', ''),
     metric('bolt', 'Einspeisung', formatW(snapshot.grid_export_w), 'aktuell', snapshot.grid_export_w > 0 ? 'good' : ''),
     metric('sun', 'PV Eingang', formatW(snapshot.solar_input_w), 'Anker gesamt', 'sun'),
     metric('bolt', 'Solar Ausgang', formatW(snapshot.solar_output_w), 'Anker gesamt', 'good'),
@@ -630,7 +672,7 @@ function renderDecision(decision) {
     ${icon(actionIcon)}
     <div>
       <strong>${escapeHtml(decision.device_name)}</strong>
-      <small>${escapeHtml(decision.reason)} · Deckung ${Math.round(decision.solar_coverage_percent)}% · Laufzeit ${decision.runtime_today_minutes} min</small>
+      <small>${escapeHtml(decision.reason)} - Deckung ${Math.round(decision.solar_coverage_percent)}% - Laufzeit ${decision.runtime_today_minutes} min</small>
     </div>
     <span class="badge ${tone}">${decision.action}</span>
   </div>`;
@@ -650,6 +692,26 @@ function renderServiceCall(call) {
 
 function emptyPanel(iconName, text) {
   return `<div class="service-call">${icon(iconName)}<div><strong>${text}</strong><small>Aktuell kein Eintrag</small></div><span></span></div>`;
+}
+
+function renderHistory(history) {
+  const entries = history.entries || [];
+  historyEl.innerHTML = entries.length
+    ? entries.map(renderHistoryEntry).join('')
+    : emptyPanel('pause', 'Noch kein Verlauf');
+}
+
+function renderHistoryEntry(entry) {
+  const ranAt = new Date(entry.ran_at);
+  const firstDecision = entry.decisions && entry.decisions.length ? entry.decisions[0] : 'keine Entscheidung';
+  return `<div class="history-row">
+    ${icon(entry.solar_surplus_risk_w > 0 ? 'alert' : 'bolt')}
+    <div>
+      <strong>${ranAt.toLocaleString('de-DE')}</strong>
+      <small>Haus ${formatW(entry.house_power_w)} - Bezug ${formatW(entry.grid_import_w)} - Einspeisung ${formatW(entry.grid_export_w)} - ${escapeHtml(firstDecision)}</small>
+    </div>
+    <span class="badge ${entry.solar_surplus_risk_w > 0 ? 'warn' : ''}">${formatW(entry.available_surplus_w)}</span>
+  </div>`;
 }
 
 function renderEntities() {

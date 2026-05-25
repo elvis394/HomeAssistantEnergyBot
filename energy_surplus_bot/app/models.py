@@ -27,6 +27,16 @@ def _require_str(data: dict[str, Any], key: str, path: str) -> str:
     return value.strip()
 
 
+def _optional_str(data: dict[str, Any], key: str, path: str) -> str | None:
+    value = data.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ConfigError(f"{path}.{key} must be a string")
+    stripped = value.strip()
+    return stripped or None
+
+
 def _bool(data: dict[str, Any], key: str, path: str, default: bool) -> bool:
     value = data.get(key, default)
     if not isinstance(value, bool):
@@ -130,6 +140,7 @@ class AnkerSystemConfig:
 class SourceSettings:
     grid_import_power_entity: str
     grid_export_power_entity: str
+    house_power_entity: str | None
     solarbox_output_limit_w: int
     anker_systems: tuple[AnkerSystemConfig, ...]
 
@@ -145,6 +156,7 @@ class SourceSettings:
         return cls(
             grid_import_power_entity=_require_str(mapping, "grid_import_power_entity", "sources"),
             grid_export_power_entity=_require_str(mapping, "grid_export_power_entity", "sources"),
+            house_power_entity=_optional_str(mapping, "house_power_entity", "sources"),
             solarbox_output_limit_w=_int_range(
                 mapping, "solarbox_output_limit_w", "sources", default=800, minimum=1
             ),

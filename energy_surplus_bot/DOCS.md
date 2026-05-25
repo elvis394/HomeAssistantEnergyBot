@@ -19,6 +19,7 @@ Important entities:
 
 - grid import power sensor
 - grid export power sensor
+- house power sensor, optional but recommended
 - Anker Solix PV input power sensor per system
 - Anker Solix output power sensor per system
 - Anker Solix battery SOC sensor per system
