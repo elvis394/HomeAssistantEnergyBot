@@ -1,0 +1,41 @@
+import unittest
+from datetime import datetime
+
+from app.config_store import validate_config_dict
+from app.ha_client import DemoHomeAssistantClient
+from app.runtime_tracker import RuntimeState
+from app.ui.server import build_status_payload, config_to_dict, list_entity_payload
+from tests.test_config_store import valid_config
+
+
+class UiServerHelperTests(unittest.TestCase):
+    def test_config_to_dict_round_trips_for_validation(self) -> None:
+        config = validate_config_dict(valid_config())
+
+        data = config_to_dict(config)
+        loaded = validate_config_dict(data)
+
+        self.assertEqual(loaded.sources.grid_import_power_entity, config.sources.grid_import_power_entity)
+
+    def test_entity_payload_lists_demo_entities(self) -> None:
+        config = validate_config_dict(valid_config())
+        client = DemoHomeAssistantClient.from_config(config)
+
+        payload = list_entity_payload(client)
+
+        self.assertTrue(any(item["entity_id"] == "switch.pool_pump" for item in payload))
+
+    def test_status_payload_contains_snapshot_and_decisions(self) -> None:
+        config = validate_config_dict(valid_config())
+        client = DemoHomeAssistantClient.from_config(config)
+        runtime = RuntimeState.empty_for_devices(config.enabled_devices, datetime(2026, 5, 25).date())
+
+        payload = build_status_payload(config, client, runtime, now=datetime(2026, 5, 25, 9, 5))
+
+        self.assertIn("snapshot", payload)
+        self.assertIn("decisions", payload)
+        self.assertEqual(payload["decisions"][0]["device_name"], "pool_pump")
+
+
+if __name__ == "__main__":
+    unittest.main()

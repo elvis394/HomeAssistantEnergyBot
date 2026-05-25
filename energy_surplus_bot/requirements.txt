@@ -1,0 +1,2 @@
+# The MVP runtime uses only Python's standard library.
+# Keep this file so the Docker build can install future dependencies without changing its shape.

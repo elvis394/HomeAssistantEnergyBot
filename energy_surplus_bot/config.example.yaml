@@ -1,0 +1,77 @@
+app:
+  auto_mode: false
+  dry_run: true
+  decision_interval_seconds: 30
+  smoothing_window_minutes: 5
+  reserve_w: 150
+
+home_assistant:
+  url: http://homeassistant.local:8123
+  token_env: HA_TOKEN
+
+sources:
+  grid_import_power_entity: sensor.grid_import_power
+  grid_export_power_entity: sensor.grid_export_power
+  solarbox_output_limit_w: 800
+  anker_systems:
+    - name: anker_1
+      solar_input_power_entity: sensor.anker_1_solar_input_power
+      solar_output_power_entity: sensor.anker_1_solar_output_power
+      battery_soc_entity: sensor.anker_1_battery_soc
+      battery_power_entity: sensor.anker_1_battery_power
+    - name: anker_2
+      solar_input_power_entity: sensor.anker_2_solar_input_power
+      solar_output_power_entity: sensor.anker_2_solar_output_power
+      battery_soc_entity: sensor.anker_2_battery_soc
+      battery_power_entity: sensor.anker_2_battery_power
+
+battery:
+  target_soc_percent: 80
+  minimum_soc_percent: 30
+  near_target_margin_percent: 5
+  soc_aggregation: min
+  over_target_action: prefer_consumers
+
+devices:
+  - name: pool_pump
+    display_name: Poolpumpe
+    entity_id: switch.pool_pump
+    type: switch
+    enabled: true
+    power_w: 450
+    priority: 10
+    min_run_minutes: 30
+    min_off_minutes: 20
+    min_daily_runtime_minutes: 480
+    max_daily_runtime_minutes: 720
+    preferred_window:
+      start: "09:00"
+      end: "18:00"
+    min_solar_coverage_percent: 70
+    force_complete_daily_runtime: true
+    battery_min_soc_percent: 55
+
+  - name: dehumidifier
+    display_name: Entfeuchter
+    entity_id: switch.dehumidifier
+    type: switch
+    enabled: false
+    power_w: 300
+    priority: 20
+    min_run_minutes: 20
+    min_off_minutes: 20
+    min_daily_runtime_minutes: 0
+    max_daily_runtime_minutes: 180
+    preferred_window:
+      start: "10:00"
+      end: "20:00"
+    min_solar_coverage_percent: 80
+    force_complete_daily_runtime: false
+    battery_min_soc_percent: 65
+
+ui:
+  enabled: true
+  host: 0.0.0.0
+  port: 8099
+  allow_entity_picker: true
+  config_path: /data/options.json
