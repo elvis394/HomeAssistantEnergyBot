@@ -1,5 +1,6 @@
 import unittest
 from datetime import datetime
+from pathlib import Path
 
 from app.config_store import validate_config_dict
 from app.ha_client import DemoHomeAssistantClient
@@ -35,6 +36,12 @@ class UiServerHelperTests(unittest.TestCase):
         self.assertIn("snapshot", payload)
         self.assertIn("decisions", payload)
         self.assertEqual(payload["decisions"][0]["device_name"], "pool_pump")
+
+    def test_addon_brand_images_exist(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+
+        self.assertTrue((root / "icon.png").exists())
+        self.assertTrue((root / "logo.png").exists())
 
 
 if __name__ == "__main__":

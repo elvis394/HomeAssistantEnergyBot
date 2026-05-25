@@ -75,6 +75,10 @@ class EnergyBotRequestHandler(BaseHTTPRequestHandler):
                 self._send_text(APP_CSS, content_type="text/css")
             elif self.path == "/app.js":
                 self._send_text(APP_JS, content_type="application/javascript")
+            elif self.path == "/icon.png":
+                self._send_file(Path(__file__).resolve().parents[2] / "icon.png", content_type="image/png")
+            elif self.path == "/logo.png":
+                self._send_file(Path(__file__).resolve().parents[2] / "logo.png", content_type="image/png")
             elif self.path == "/api/config":
                 self._send_json(config_to_dict(self.server.load_config()))
             elif self.path == "/api/entities":
@@ -124,6 +128,14 @@ class EnergyBotRequestHandler(BaseHTTPRequestHandler):
         body = payload.encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", f"{content_type}; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _send_file(self, path: Path, content_type: str, status: HTTPStatus = HTTPStatus.OK) -> None:
+        body = path.read_bytes()
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -202,26 +214,56 @@ INDEX_HTML = """<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Energy Surplus Bot</title>
+  <link rel="icon" href="/icon.png">
   <link rel="stylesheet" href="/app.css">
 </head>
 <body>
+  <svg class="symbols" aria-hidden="true">
+    <symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-15.4 6.4M3 12A9 9 0 0 1 18.4 5.6"/><path d="M21 4v6h-6M3 20v-6h6"/></symbol>
+    <symbol id="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="icon-grid" viewBox="0 0 24 24"><path d="M4 20h16M6 20V8l6-4 6 4v12M9 20v-7h6v7"/></symbol>
+    <symbol id="icon-battery" viewBox="0 0 24 24"><path d="M4 7h14a2 2 0 0 1 2 2v1h1v4h-1v1a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z"/><path d="M6 10v4M9 10v4M12 10v4"/></symbol>
+    <symbol id="icon-bolt" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 10-13h-7l0-7Z"/></symbol>
+    <symbol id="icon-pump" viewBox="0 0 24 24"><path d="M4 14h7a5 5 0 0 0 5-5V5h3v4a8 8 0 0 1-8 8H4Z"/><path d="M4 10h5M4 18h5M17 5h4"/></symbol>
+    <symbol id="icon-check" viewBox="0 0 24 24"><path d="m4 12 5 5L20 6"/></symbol>
+    <symbol id="icon-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+    <symbol id="icon-alert" viewBox="0 0 24 24"><path d="M12 3 2 21h20Z"/><path d="M12 9v5M12 18h.01"/></symbol>
+    <symbol id="icon-settings" viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/><path d="M4 12H2M22 12h-2M12 4V2M12 22v-2M5.6 5.6 4.2 4.2M19.8 19.8l-1.4-1.4M18.4 5.6l1.4-1.4M4.2 19.8l1.4-1.4"/></symbol>
+  </svg>
   <header>
-    <h1>Energy Surplus Bot</h1>
-    <button id="refresh" type="button">Aktualisieren</button>
+    <div class="brand">
+      <img src="/icon.png" alt="">
+      <div>
+        <h1>Energy Surplus Bot</h1>
+        <p id="lastRun">Lade Status...</p>
+      </div>
+    </div>
+    <button id="refresh" type="button" title="Aktualisieren"><svg><use href="#icon-refresh"></use></svg><span>Aktualisieren</span></button>
   </header>
   <main>
-    <section>
+    <section class="status-section">
       <h2>Status</h2>
-      <pre id="status">Lade...</pre>
+      <div id="metricGrid" class="metric-grid"></div>
+      <div class="split">
+        <div>
+          <h3>Entscheidungen</h3>
+          <div id="decisions" class="list-panel"></div>
+        </div>
+        <div>
+          <h3>Schaltstatus</h3>
+          <div id="serviceCalls" class="list-panel"></div>
+        </div>
+      </div>
+      <div id="warnings" class="warnings"></div>
     </section>
-    <section>
-      <h2>Konfiguration</h2>
+    <section class="config-section">
+      <h2><svg><use href="#icon-settings"></use></svg> Konfiguration</h2>
       <p class="warning">Echte Schaltbefehle passieren nur bei auto_mode=true und dry_run=false.</p>
       <textarea id="config" spellcheck="false"></textarea>
       <button id="save" type="button">Speichern</button>
       <p id="saveResult"></p>
     </section>
-    <section>
+    <section class="entities-section">
       <h2>Entities</h2>
       <input id="entityFilter" type="search" placeholder="Filtern">
       <ul id="entities"></ul>
@@ -234,11 +276,24 @@ INDEX_HTML = """<!doctype html>
 
 
 APP_CSS = """
+:root {
+  --bg: #eef3f1;
+  --panel: #ffffff;
+  --text: #18202a;
+  --muted: #5f6b76;
+  --line: #d8dee6;
+  --green: #1f6f5e;
+  --mint: #89cfb9;
+  --sun: #ffd559;
+  --warn: #b76b00;
+  --danger: #b53d3d;
+}
+
 body {
   margin: 0;
   font-family: Arial, sans-serif;
   color: #18202a;
-  background: #f5f7f9;
+  background: var(--bg);
 }
 
 header {
@@ -246,26 +301,69 @@ header {
   align-items: center;
   justify-content: space-between;
   padding: 16px 24px;
-  background: #ffffff;
-  border-bottom: 1px solid #d8dee6;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
 }
 
-h1, h2 {
+.symbols {
+  display: none;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand img {
+  width: 48px;
+  height: 48px;
+}
+
+.brand p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+h1, h2, h3 {
   margin: 0;
 }
 
 main {
   display: grid;
   gap: 16px;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: minmax(360px, 1.2fr) minmax(360px, .8fr);
   padding: 16px;
 }
 
 section {
-  background: #ffffff;
-  border: 1px solid #d8dee6;
+  background: var(--panel);
+  border: 1px solid var(--line);
   border-radius: 8px;
   padding: 16px;
+}
+
+.status-section {
+  grid-column: 1 / -1;
+}
+
+.config-section, .entities-section {
+  min-width: 0;
+}
+
+h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+}
+
+h3 {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 18px 0 8px;
+  text-transform: uppercase;
 }
 
 button, input, textarea {
@@ -273,11 +371,125 @@ button, input, textarea {
 }
 
 button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   border: 1px solid #6c7a89;
   background: #26384d;
   color: #ffffff;
   border-radius: 6px;
   padding: 8px 12px;
+}
+
+svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  flex: 0 0 auto;
+}
+
+.metric-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin-top: 14px;
+}
+
+.metric-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  background: #fbfcfd;
+}
+
+.metric-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.metric-card strong {
+  display: block;
+  font-size: 28px;
+  margin-top: 10px;
+}
+
+.metric-card small {
+  color: var(--muted);
+}
+
+.metric-card.good svg,
+.decision.turn_on svg,
+.decision.keep_on svg {
+  color: var(--green);
+}
+
+.metric-card.warn svg,
+.warning-icon {
+  color: var(--warn);
+}
+
+.metric-card.sun svg {
+  color: var(--sun);
+}
+
+.split {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.list-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.decision,
+.service-call,
+.entity-row {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #fbfcfd;
+}
+
+.decision strong,
+.service-call strong {
+  display: block;
+}
+
+.decision small,
+.service-call small,
+.entity-row small {
+  color: var(--muted);
+}
+
+.badge {
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: #edf3f1;
+  color: var(--green);
+  font-size: 12px;
+}
+
+.badge.warn {
+  background: #fff3d6;
+  color: var(--warn);
+}
+
+.badge.danger {
+  background: #ffe6e6;
+  color: var(--danger);
 }
 
 textarea {
@@ -310,20 +522,35 @@ input {
 }
 
 ul {
-  list-style: none;
   margin: 0;
   padding: 0;
+  list-style: none;
 }
 
 li {
-  border-top: 1px solid #edf0f3;
-  padding: 8px 0;
+  margin: 8px 0;
+}
+
+@media (max-width: 860px) {
+  header {
+    align-items: flex-start;
+    gap: 12px;
+    flex-direction: column;
+  }
+
+  main {
+    grid-template-columns: 1fr;
+  }
 }
 """
 
 
 APP_JS = """
-const statusEl = document.querySelector('#status');
+const lastRunEl = document.querySelector('#lastRun');
+const metricGridEl = document.querySelector('#metricGrid');
+const decisionsEl = document.querySelector('#decisions');
+const serviceCallsEl = document.querySelector('#serviceCalls');
+const warningsEl = document.querySelector('#warnings');
 const configEl = document.querySelector('#config');
 const saveResultEl = document.querySelector('#saveResult');
 const entitiesEl = document.querySelector('#entities');
@@ -344,9 +571,85 @@ async function refresh() {
     getJson('/api/entities'),
   ]);
   configEl.value = JSON.stringify(config, null, 2);
-  statusEl.textContent = JSON.stringify(status, null, 2);
+  renderStatus(status);
   entities = entityData;
   renderEntities();
+}
+
+function icon(name) {
+  return `<svg><use href="#icon-${name}"></use></svg>`;
+}
+
+function formatW(value) {
+  return `${Math.round(value || 0)} W`;
+}
+
+function formatPercent(value) {
+  if (value === null || value === undefined) return 'unbekannt';
+  return `${Number(value).toFixed(1)}%`;
+}
+
+function renderStatus(status) {
+  const snapshot = status.snapshot;
+  const ranAt = new Date(status.ran_at);
+  lastRunEl.textContent = `Letzte Aktualisierung: ${ranAt.toLocaleString('de-DE')}`;
+  metricGridEl.innerHTML = [
+    metric('grid', 'Netzbezug', formatW(snapshot.grid_import_w), 'aktuell', snapshot.grid_import_w > 0 ? 'warn' : 'good'),
+    metric('bolt', 'Einspeisung', formatW(snapshot.grid_export_w), 'aktuell', snapshot.grid_export_w > 0 ? 'good' : ''),
+    metric('sun', 'PV Eingang', formatW(snapshot.solar_input_w), 'Anker gesamt', 'sun'),
+    metric('bolt', 'Solar Ausgang', formatW(snapshot.solar_output_w), 'Anker gesamt', 'good'),
+    metric('battery', 'Akku', formatPercent(snapshot.battery_soc_percent), snapshot.battery_near_target ? 'nahe Zielwert' : 'unter Zielwert', snapshot.battery_near_target ? 'good' : ''),
+    metric('alert', 'Abregelrisiko', formatW(snapshot.solar_surplus_risk_w), 'durch Ausgangslimit', snapshot.solar_surplus_risk_w > 0 ? 'warn' : 'good'),
+  ].join('');
+
+  decisionsEl.innerHTML = status.decisions.length
+    ? status.decisions.map(renderDecision).join('')
+    : emptyPanel('pause', 'Keine Entscheidungen');
+
+  serviceCallsEl.innerHTML = status.service_calls.length
+    ? status.service_calls.map(renderServiceCall).join('')
+    : emptyPanel('pause', 'Keine Schaltaktionen');
+
+  warningsEl.innerHTML = snapshot.warnings && snapshot.warnings.length
+    ? `<h3>Warnungen</h3>${snapshot.warnings.map(warning => `<div class="service-call">${icon('alert')}<div><strong>${escapeHtml(warning)}</strong><small>Sensorwert pruefen</small></div><span class="badge warn">Warnung</span></div>`).join('')}`
+    : '';
+}
+
+function metric(iconName, label, value, subline, tone) {
+  return `<article class="metric-card ${tone || ''}">
+    <div class="metric-head"><span>${label}</span>${icon(iconName)}</div>
+    <strong>${value}</strong>
+    <small>${subline}</small>
+  </article>`;
+}
+
+function renderDecision(decision) {
+  const actionIcon = decision.action.includes('on') ? 'check' : decision.action.includes('off') ? 'pause' : 'bolt';
+  const tone = decision.action === 'turn_off' ? 'danger' : decision.action === 'keep_off' ? 'warn' : '';
+  return `<div class="decision ${decision.action}">
+    ${icon(actionIcon)}
+    <div>
+      <strong>${escapeHtml(decision.device_name)}</strong>
+      <small>${escapeHtml(decision.reason)} · Deckung ${Math.round(decision.solar_coverage_percent)}% · Laufzeit ${decision.runtime_today_minutes} min</small>
+    </div>
+    <span class="badge ${tone}">${decision.action}</span>
+  </div>`;
+}
+
+function renderServiceCall(call) {
+  const badge = call.skipped ? '<span class="badge warn">uebersprungen</span>' : '<span class="badge">bereit</span>';
+  return `<div class="service-call">
+    ${icon(call.skipped ? 'pause' : 'check')}
+    <div>
+      <strong>${escapeHtml(call.device_name)}</strong>
+      <small>${escapeHtml(call.reason)}</small>
+    </div>
+    ${badge}
+  </div>`;
+}
+
+function emptyPanel(iconName, text) {
+  return `<div class="service-call">${icon(iconName)}<div><strong>${text}</strong><small>Aktuell kein Eintrag</small></div><span></span></div>`;
 }
 
 function renderEntities() {
@@ -356,7 +659,10 @@ function renderEntities() {
     const text = `${entity.entity_id} ${entity.friendly_name || ''} ${entity.state}`;
     if (filter && !text.toLowerCase().includes(filter)) continue;
     const item = document.createElement('li');
-    item.textContent = `${entity.entity_id} = ${entity.state}${entity.unit ? ' ' + entity.unit : ''}`;
+    item.className = 'entity-row';
+    item.innerHTML = `${icon(entity.entity_id.startsWith('switch.') ? 'pump' : 'bolt')}
+      <div><strong>${escapeHtml(entity.entity_id)}</strong><small>${escapeHtml(entity.friendly_name || '')}</small></div>
+      <span class="badge">${escapeHtml(entity.state)}${entity.unit ? ' ' + escapeHtml(entity.unit) : ''}</span>`;
     entitiesEl.appendChild(item);
   }
 }
@@ -385,13 +691,22 @@ async function saveConfig() {
 }
 
 document.querySelector('#refresh').addEventListener('click', () => refresh().catch(error => {
-  statusEl.textContent = error.message;
+  lastRunEl.textContent = error.message;
 }));
 document.querySelector('#save').addEventListener('click', () => saveConfig().catch(error => {
   saveResultEl.textContent = error.message;
 }));
 filterEl.addEventListener('input', renderEntities);
 refresh().catch(error => {
-  statusEl.textContent = error.message;
+  lastRunEl.textContent = error.message;
 });
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
 """
