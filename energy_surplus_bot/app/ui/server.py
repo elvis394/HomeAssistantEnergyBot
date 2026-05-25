@@ -214,8 +214,8 @@ INDEX_HTML = """<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Energy Surplus Bot</title>
-  <link rel="icon" href="/icon.png">
-  <link rel="stylesheet" href="/app.css">
+  <link rel="icon" href="icon.png">
+  <link rel="stylesheet" href="app.css">
 </head>
 <body>
   <svg class="symbols" aria-hidden="true">
@@ -232,7 +232,7 @@ INDEX_HTML = """<!doctype html>
   </svg>
   <header>
     <div class="brand">
-      <img src="/icon.png" alt="">
+      <img src="icon.png" alt="">
       <div>
         <h1>Energy Surplus Bot</h1>
         <p id="lastRun">Lade Status...</p>
@@ -269,7 +269,7 @@ INDEX_HTML = """<!doctype html>
       <ul id="entities"></ul>
     </section>
   </main>
-  <script src="/app.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
 """
@@ -566,9 +566,9 @@ async function getJson(path) {
 
 async function refresh() {
   const [config, status, entityData] = await Promise.all([
-    getJson('/api/config'),
-    getJson('/api/status'),
-    getJson('/api/entities'),
+    getJson('api/config'),
+    getJson('api/status'),
+    getJson('api/entities'),
   ]);
   configEl.value = JSON.stringify(config, null, 2);
   renderStatus(status);
@@ -676,7 +676,7 @@ async function saveConfig() {
     saveResultEl.textContent = `JSON-Fehler: ${error.message}`;
     return;
   }
-  const response = await fetch('/api/config', {
+  const response = await fetch('api/config', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(payload),

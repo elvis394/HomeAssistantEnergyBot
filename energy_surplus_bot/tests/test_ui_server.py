@@ -5,7 +5,7 @@ from pathlib import Path
 from app.config_store import validate_config_dict
 from app.ha_client import DemoHomeAssistantClient
 from app.runtime_tracker import RuntimeState
-from app.ui.server import build_status_payload, config_to_dict, list_entity_payload
+from app.ui.server import APP_JS, INDEX_HTML, build_status_payload, config_to_dict, list_entity_payload
 from tests.test_config_store import valid_config
 
 
@@ -42,6 +42,15 @@ class UiServerHelperTests(unittest.TestCase):
 
         self.assertTrue((root / "icon.png").exists())
         self.assertTrue((root / "logo.png").exists())
+
+    def test_ui_uses_relative_paths_for_ingress(self) -> None:
+        self.assertIn('href="app.css"', INDEX_HTML)
+        self.assertIn('src="app.js"', INDEX_HTML)
+        self.assertIn('src="icon.png"', INDEX_HTML)
+        self.assertIn("getJson('api/status')", APP_JS)
+        self.assertIn("fetch('api/config'", APP_JS)
+        self.assertNotIn('href="/app.css"', INDEX_HTML)
+        self.assertNotIn("getJson('/api/status')", APP_JS)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 name: Energy Surplus Bot
-version: "0.1.1"
+version: "0.1.2"
 slug: energy_surplus_bot
 description: Uses Home Assistant energy data to run flexible loads from solar surplus.
 url: https://github.com/elvis394/HomeAssistantEnergyBot/tree/main/energy_surplus_bot
