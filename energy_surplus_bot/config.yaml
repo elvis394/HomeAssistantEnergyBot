@@ -20,6 +20,7 @@ ports:
 ports_description:
   8099/tcp: Energy Surplus Bot web UI
 homeassistant_api: true
+hassio_api: true
 options:
   app:
     auto_mode: false

@@ -1,6 +1,7 @@
 import unittest
+from unittest.mock import patch
 
-from app.ha_client import DemoHomeAssistantClient, EntityState, state_to_float
+from app.ha_client import DemoHomeAssistantClient, EntityState, read_token, state_to_float
 
 
 class HomeAssistantClientHelperTests(unittest.TestCase):
@@ -26,6 +27,18 @@ class HomeAssistantClientHelperTests(unittest.TestCase):
 
         self.assertTrue(result["dry_run"])
         self.assertEqual(client.service_calls[0]["service"], "turn_on")
+
+    def test_read_token_uses_environment(self) -> None:
+        with patch.dict("os.environ", {"SUPERVISOR_TOKEN": "abc"}, clear=True):
+            self.assertEqual(read_token("SUPERVISOR_TOKEN"), "abc")
+
+    def test_read_token_uses_legacy_hassio_token(self) -> None:
+        with patch.dict("os.environ", {"HASSIO_TOKEN": "legacy"}, clear=True):
+            self.assertEqual(read_token("SUPERVISOR_TOKEN"), "legacy")
+
+    def test_read_token_returns_none_when_missing(self) -> None:
+        with patch.dict("os.environ", {}, clear=True):
+            self.assertIsNone(read_token("MISSING_TOKEN"))
 
 
 if __name__ == "__main__":

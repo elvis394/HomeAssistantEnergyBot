@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
@@ -43,10 +44,11 @@ class HomeAssistantClient:
 
     @classmethod
     def from_config(cls, config: EnergyBotConfig) -> HomeAssistantClient:
-        token = os.environ.get(config.home_assistant.token_env)
+        token = read_token(config.home_assistant.token_env)
         if not token:
             raise HomeAssistantError(
-                f"Environment variable {config.home_assistant.token_env} is required for Home Assistant access"
+                f"Token {config.home_assistant.token_env} is required for Home Assistant access. "
+                "Make sure the add-on has homeassistant_api enabled and was restarted after updating."
             )
         return cls(config.home_assistant.url, token)
 
@@ -176,3 +178,35 @@ class DemoHomeAssistantClient:
         }
         self.service_calls.append(call)
         return call
+
+
+def read_token(name: str) -> str | None:
+    candidates = [name]
+    if name == "SUPERVISOR_TOKEN":
+        candidates.append("HASSIO_TOKEN")
+
+    for candidate in candidates:
+        value = os.environ.get(candidate)
+        if value:
+            return value
+
+    for candidate in candidates:
+        value = _read_env_file(candidate)
+        if value:
+            return value
+    return None
+
+
+def _read_env_file(name: str) -> str | None:
+    for base_path in (
+        Path("/run/s6/container_environment"),
+        Path("/var/run/s6/container_environment"),
+    ):
+        token_path = base_path / name
+        try:
+            value = token_path.read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+        if value:
+            return value
+    return None
